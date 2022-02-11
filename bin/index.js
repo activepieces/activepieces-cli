@@ -158,11 +158,7 @@ function updatePiece() {
             axios(config)
                 .then(function (res) {
                     res.data.data.forEach(flow => {
-                        let flowLatestVersion = commitFlow(flow.id);
-                        if (!flowLatestVersion) {
-                            flowLatestVersion = flow.versionsList.at(-1).id;
-                        }
-                        flowsVersionId.push(flowLatestVersion);
+                        flowsVersionId.push(flow.versionsList.at(-1).id);
                     });
                     piece.version.flowsVersionId = flowsVersionId;
 
