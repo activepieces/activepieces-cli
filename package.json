@@ -1,6 +1,6 @@
 {
   "name": "activepieces-cli",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "bin/index.js",
   "scripts": {
@@ -15,6 +15,7 @@
     "adm-zip": "^0.5.9",
     "axios": "^0.25.0",
     "child_process": "^1.0.2",
+    "cli-autoupdate": "^2.0.4",
     "findup-sync": "^5.0.0",
     "form-data": "^4.0.0",
     "jsonschema": "^1.4.0",

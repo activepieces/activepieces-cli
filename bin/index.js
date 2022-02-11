@@ -10,19 +10,72 @@ const AdmZip = require('adm-zip');
 const flowConverter = require('./flow_converter');
 const errorHandler = require('./error_handler');
 var findup = require('findup-sync');
+const AutoUpdate = require('cli-autoupdate');
+let pkg = require('../package.json');
+const update = new AutoUpdate(pkg);
 
 let project = {};
+let argv;
+
+function parseInputCommand() {
+    argv = yargs
+        .command('piece <pice_action>', 'Piece commands', (yargs) => {
+            return yargs
+                .command('create <piece_name>', 'Creates default templates for a piece', () => {
+                }, (argv) => {
+                    createPiece(argv.piece_name);
+                })
+                .command('update', 'Commits all changes piece', () => {
+                }, () => {
+                    updatePieceWrapper();
+                })
+                .command('publish <environment>', 'Push piece to environment', () => {
+                }, (argv) => {
+                    publishPiece(argv.environment);
+                })
+        })
+        .command('flow <flow_action>', 'Flow commands', (yargs) => {
+            return yargs
+                .command('create <flow_name>', 'Creates default template for a flow', () => {
+                }, (argv) => {
+                    createFlow(argv.flow_name);
+                })
+                .command('update', 'Updates current version of flow - saves changes', () => {
+                }, () => {
+                    updateFlow();
+                })
+                .command('commit', 'Commits current version of flow ', () => {
+                }, () => {
+                    commitFlow();
+                })
+        })
+        .option('verbose', {
+            alias: 'v',
+            type: 'boolean',
+            description: 'Run with verbose logging'
+        })
+        .strictCommands()
+        .alias('help', 'h')
+        .parse()
+
+    errorHandler.init(argv.verbose);
+}
+
 function setup() {
-    let filepath = findup('project.json');
-    if (filepath) {
-        let rawdata = fs.readFileSync(filepath);
-        project = JSON.parse(rawdata);
-    }else{
-        console.log('Wrong directory, Please use command inside project directory');
-        process.exit();
-    }
+    update.on('finish', () => {
+        let filepath = findup('project.json');
+        if (filepath) {
+            let rawdata = fs.readFileSync(filepath);
+            project = JSON.parse(rawdata);
+        }else{
+            console.log('Wrong directory, Please use command inside project directory');
+            process.exit();
+        }
+        parseInputCommand();
+    });
 }
 setup();
+
 
 let argv = yargs
     .command('piece <pice_action>', 'Piece commands', (yargs) => {
@@ -335,13 +388,16 @@ function updateFlow() {
 
         axios(config)
             .then(function (res) {
+                console.log("Flow updated successfully");
                 if(argv.verbose) {
-                    console.log("Flow updated successfully");
                     console.log(JSON.stringify(res.data));
                 }
 
             })
             .catch(function (err) {
+                if (argv.verbose) {
+                    console.log(err);
+                }
                 if(err.response.data.errorCode === 'flow_version_locked') {
                     cloneFlow(flow.flowId,   true);
                 }
