@@ -10,12 +10,17 @@ const AdmZip = require('adm-zip');
 const flowConverter = require('./flow_converter');
 const errorHandler = require('./error_handler');
 var findup = require('findup-sync');
+const prompts = require('prompts');
+
 const AutoUpdate = require('cli-autoupdate');
 let pkg = require('../package.json');
 const update = new AutoUpdate(pkg);
 
 let project = {};
 let argv;
+let functionToExec;
+let functionInput;
+let needProjectData = true
 
 function parseInputCommand() {
     argv = yargs
@@ -23,31 +28,38 @@ function parseInputCommand() {
             return yargs
                 .command('create <piece_name>', 'Creates default templates for a piece', () => {
                 }, (argv) => {
-                    createPiece(argv.piece_name);
+                    functionToExec = createPiece;
+                    functionInput = argv.piece_name;
                 })
                 .command('update', 'Commits all changes piece', () => {
                 }, () => {
-                    updatePieceWrapper();
+                    functionToExec = updatePieceWrapper;
                 })
                 .command('publish <environment>', 'Push piece to environment', () => {
                 }, (argv) => {
-                    publishPiece(argv.environment);
+                    functionToExec = publishPiece;
+                    functionInput = argv.environment;
                 })
         })
         .command('flow <flow_action>', 'Flow commands', (yargs) => {
             return yargs
                 .command('create <flow_name>', 'Creates default template for a flow', () => {
                 }, (argv) => {
-                    createFlow(argv.flow_name);
+                    functionToExec = createFlow;
+                    functionInput = argv.flow_name;
                 })
                 .command('update', 'Updates current version of flow - saves changes', () => {
                 }, () => {
-                    updateFlow();
+                    functionToExec = updateFlow;
                 })
                 .command('commit', 'Commits current version of flow ', () => {
                 }, () => {
-                    commitFlow();
+                    functionToExec = commitFlow;
                 })
+        })
+        .command('project init', 'Initialize project', () =>{
+            needProjectData = false;
+            functionToExec = projectInit;
         })
         .option('verbose', {
             alias: 'v',
@@ -57,68 +69,66 @@ function parseInputCommand() {
         .strictCommands()
         .alias('help', 'h')
         .parse()
+}
 
-    errorHandler.init(argv.verbose);
+function getProjectData() {
+    let filepath = findup('project.json');
+    if (filepath) {
+        let rawdata = fs.readFileSync(filepath);
+        project = JSON.parse(rawdata);
+    }else{
+        console.log('Wrong directory, Please use command inside project directory');
+        process.exit();
+    }
 }
 
 function setup() {
     update.on('finish', () => {
-        let filepath = findup('project.json');
-        if (filepath) {
-            let rawdata = fs.readFileSync(filepath);
-            project = JSON.parse(rawdata);
-        }else{
-            console.log('Wrong directory, Please use command inside project directory');
-            process.exit();
-        }
         parseInputCommand();
+        errorHandler.init(argv.verbose);
+
+        if(needProjectData){
+            getProjectData();
+        }
+        functionToExec(functionInput);
     });
 }
 setup();
 
 
-let argv = yargs
-    .command('piece <pice_action>', 'Piece commands', (yargs) => {
-        return yargs
-            .command('create <piece_name>', 'Creates default templates for a piece', () => {
-            }, (argv) => {
-                createPiece(argv.piece_name);
-            })
-            .command('update', 'Commits all changes piece', () => {
-            }, () => {
-                updatePieceWrapper();
-            })
-            .command('publish <environment>', 'Push piece to environment', () => {
-            }, (argv) => {
-                publishPiece(argv.environment);
-            })
-    })
-    .command('flow <flow_action>', 'Flow commands', (yargs) => {
-        return yargs
-            .command('create <flow_name>', 'Creates default template for a flow', () => {
-            }, (argv) => {
-                createFlow(argv.flow_name);
-            })
-            .command('update', 'Updates current version of flow - saves changes', () => {
-            }, () => {
-                updateFlow();
-            })
-            .command('commit', 'Commits current version of flow ', () => {
-            }, () => {
-                commitFlow();
-            })
-    })
-    .option('verbose', {
-        alias: 'v',
-        type: 'boolean',
-        description: 'Run with verbose logging'
-    })
-    .strictCommands()
-    .alias('help', 'h')
-    .parse()
 
+function projectInit() {
+    prompts({
+        type: 'text',
+        name: 'api_key',
+        message: 'Please enter your api key:',
+        validate: api_key => api_key.length > 0
+    }).then(input => {
+        console.log(input.api_key);
+        const config = {
+            method: 'get',
+            url: host + '/api-keys/' + input.api_key,
+            headers: {
+                'Authorization': 'Bearer ' + input.api_key
+            }
+        };
+        axios(config).then((res) => {
+            let data = {
+                "apiKey": res.data.secret,
+                "projectId": res.data.projectId,
+            }
+            fs.writeFile('./project.json', JSON.stringify(data, null, 2), function writeJSON(err) {
+                if (err) {
+                    console.log(err);
+                }
+                console.log("Project created successfully");
+            });
+        }).catch((err) => {
+            errorHandler.printError(err);
+        });
 
-errorHandler.init(argv.verbose);
+    });
+}
 
 function updatePieceRequest(piece) {
 
