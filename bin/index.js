@@ -446,9 +446,7 @@ function commitFlow(flowId) {
 
         axios(config)
             .then(function (res) {
-                if (argv.verbose) {
-                    console.log('Flow committed successfully');
-                }
+                console.log('Flow committed successfully');
                 cloneFlow(flow);
                 return res.data.versionsList.at(-1).id;
             })
