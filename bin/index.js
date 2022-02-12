@@ -104,7 +104,6 @@ function projectInit() {
         message: 'Please enter your api key:',
         validate: api_key => api_key.length > 0
     }).then(input => {
-        console.log(input.api_key);
         const config = {
             method: 'get',
             url: host + '/api-keys/' + input.api_key,
@@ -182,7 +181,9 @@ function updatePiece() {
                     }).catch((err) => {
                         reject(err);
                     });
-                });
+                }).catch(err => {
+                reject(err);
+            });
         } else {
             reject('Wrong directory, please use command inside piece directory');
         }
@@ -337,9 +338,7 @@ function createFlow(flow_name) {
                     data.trigger = {};
                     fs.writeFile(path.join(process.cwd(), flow_name, "flow.json"), JSON.stringify(data, null, 2), (err) => {
                             if (err) return console.log(err);
-                            if (argv.verbose) {
-                                console.log('Flow created successfully!');
-                            }
+                            console.log('Flow created successfully!');
                         }
                     );
                 });
@@ -401,11 +400,14 @@ function updateFlow() {
 
             })
             .catch(function (err) {
-                if (argv.verbose) {
-                    console.log(err);
-                }
+
                 if(err.response.data.errorCode === 'flow_version_locked') {
+                    if (argv.verbose) {
+                        console.log('flow version locked, cloning flow..');
+                    }
                     cloneFlow(flow.flowId,   true);
+                } else {
+                    errorHandler.printError(err);
                 }
             });
 
