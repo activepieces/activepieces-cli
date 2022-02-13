@@ -7,6 +7,7 @@ module.exports.printError = (err) => {
         let code = err.response.status;
         switch (code) {
             case 401:
+            case 403:
                 console.log("Error: Forbidden - unauthorized access");
                 console.log("Is your api key correct?");
                 break;
