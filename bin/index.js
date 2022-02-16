@@ -220,7 +220,7 @@ function getEnvironmentId(environment_name) {
 }
 function publishPiece(environment_name) {
     updatePiece().then(res => {
-        let latestVersion = res.data.versionsList.at(-1).id;
+        let latestVersion = res.data.versionsList.at(-1);
         getEnvironmentId(environment_name).then((environment) => {
             let found = false;
             environment.deployedPieces.forEach(piece => {
@@ -388,6 +388,8 @@ function updateFlow() {
                 'Authorization': 'Bearer ' + project.apiKey,
                 ...flowData.getHeaders()
             },
+            maxContentLength: 100000000,
+            maxBodyLength: 1000000000,
             data: flowData
         };
 
@@ -400,8 +402,7 @@ function updateFlow() {
 
             })
             .catch(function (err) {
-
-                if(err.response.data.errorCode === 'flow_version_locked') {
+                if(err.response?.data?.errorCode === 'flow_version_locked') {
                     if (argv.verbose) {
                         console.log('flow version locked, cloning flow..');
                     }
