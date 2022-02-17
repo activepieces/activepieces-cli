@@ -2,7 +2,7 @@
 const yargs = require('yargs');
 const fs = require('fs');
 const path = require('path');
-const {host} = require("./environment");
+const environment = require("./environment");
 const FormData = require('form-data');
 const axios = require('axios');
 var child_process = require('child_process');
@@ -11,9 +11,11 @@ const flowConverter = require('./flow_converter');
 const errorHandler = require('./error_handler');
 var findup = require('findup-sync');
 const prompts = require('prompts');
+const logger = require('node-color-log');
 
 const AutoUpdate = require('cli-autoupdate');
 let pkg = require('../package.json');
+const {log} = require("node-color-log");
 const update = new AutoUpdate(pkg);
 
 let project = {};
@@ -21,6 +23,7 @@ let argv;
 let functionToExec;
 let functionInput;
 let needProjectData = true
+let host;
 
 function parseInputCommand() {
     argv = yargs
@@ -66,6 +69,11 @@ function parseInputCommand() {
             type: 'boolean',
             description: 'Run with verbose logging'
         })
+        .option('local', {
+            alias: 'l',
+            type: 'boolean',
+            description: "Run on local environment"
+        })
         .strictCommands()
         .alias('help', 'h')
         .parse()
@@ -77,8 +85,20 @@ function getProjectData() {
         let rawdata = fs.readFileSync(filepath);
         project = JSON.parse(rawdata);
     }else{
-        console.log('Wrong directory, Please use command inside project directory');
+        logger.error('Wrong directory, Please use command inside project directory');
         process.exit();
+    }
+}
+
+function beautify(data) {
+    return JSON.stringify(data, null, 2);
+}
+
+function getHost() {
+    if(argv.local) {
+        host = environment.local_host;
+    }else {
+        host = environment.staging_host;
     }
 }
 
@@ -86,10 +106,11 @@ function setup() {
     update.on('finish', () => {
         parseInputCommand();
         errorHandler.init(argv.verbose);
-
+        getHost();
         if(needProjectData){
             getProjectData();
         }
+
         functionToExec(functionInput);
     });
 }
@@ -111,6 +132,7 @@ function projectInit() {
                 'Authorization': 'Bearer ' + input.api_key
             }
         };
+
         axios(config).then((res) => {
             let data = {
                 "apiKey": res.data.secret,
@@ -118,14 +140,13 @@ function projectInit() {
             }
             fs.writeFile('./project.json', JSON.stringify(data, null, 2), function writeJSON(err) {
                 if (err) {
-                    console.log(err);
+                    logger.error(err);
                 }
-                console.log("Project created successfully");
+                logger.info("Project created successfully");
             });
         }).catch((err) => {
             errorHandler.printError(err);
         });
-
     });
 }
 
@@ -174,7 +195,7 @@ function updatePiece() {
                     updatePieceRequest(piece).then(function (updatePieceResponse) {
                         fs.writeFile('./piece.json', JSON.stringify(piece, null, 2), function writeJSON(err) {
                             if (err) {
-                                console.log(err);
+                                logger.error(err);
                             }
                         });
                         resolve(updatePieceResponse);
@@ -192,9 +213,9 @@ function updatePiece() {
 
 function updatePieceWrapper() {
     updatePiece().then(res => {
-        console.log("Piece updated successfully");
+        logger.info("Piece updated successfully");
         if (argv.verbose) {
-            console.log(JSON.stringify(res.data));
+            logger.info(beautify(res.data));
         }
     }).catch(err => {
         errorHandler.printError(err);
@@ -247,9 +268,9 @@ function publishPiece(environment_name) {
             };
 
             axios(config).then((res) => {
-                console.log("Piece published successfully to environment " + environment_name);
+                logger.info("Piece published successfully to environment " + environment_name);
                 if (argv.verbose) {
-                    console.log(JSON.stringify(res.data));
+                    logger.info(beautify(res.data));
                 }
             }).catch((err) => {
                 errorHandler.printError(err);
@@ -289,12 +310,12 @@ function createPiece(piece_name) {
         .then(function (res) {
             fs.mkdir(path.join(process.cwd(), piece_name), (err) => {
                 if (err) {
-                    return console.error(err);
+                    return logger.error(err);
                 }
                 data.pieceId = res.data.id;
                 fs.writeFile(path.join(process.cwd(), piece_name, "piece.json"), JSON.stringify(data, null, 2), (err) => {
-                        if (err) return console.error(err);
-                        console.log('Piece created successfully!');
+                        if (err) return logger.error(err);
+                        logger.info('Piece created successfully!');
                     }
                 );
             });
@@ -332,13 +353,13 @@ function createFlow(flow_name) {
             .then(function (res) {
                 fs.mkdir(path.join(process.cwd(), flow_name), (err) => {
                     if (err) {
-                        return console.error(err);
+                        return logger.error(err);
                     }
                     data.flowId = res.data.id;
                     data.trigger = {};
                     fs.writeFile(path.join(process.cwd(), flow_name, "flow.json"), JSON.stringify(data, null, 2), (err) => {
-                            if (err) return console.log(err);
-                            console.log('Flow created successfully!');
+                            if (err) return logger.error(err);
+                            logger.info('Flow created successfully!');
                         }
                     );
                 });
@@ -347,7 +368,7 @@ function createFlow(flow_name) {
                 errorHandler.printError(err);
             });
     }else {
-        console.log("Wrong directory, please use command inside piece directory");
+        logger.error("Wrong directory, please use command inside piece directory");
     }
 }
 
@@ -395,16 +416,16 @@ function updateFlow() {
 
         axios(config)
             .then(function (res) {
-                console.log("Flow updated successfully");
+                logger.info("Flow updated successfully");
                 if(argv.verbose) {
-                    console.log(JSON.stringify(res.data));
+                    logger.info(beatify(res.data));
                 }
 
             })
             .catch(function (err) {
                 if(err.response?.data?.errorCode === 'flow_version_locked') {
                     if (argv.verbose) {
-                        console.log('flow version locked, cloning flow..');
+                        logger.debug('flow version locked, cloning flow..');
                     }
                     cloneFlow(flow.flowId,   true);
                 } else {
@@ -413,7 +434,7 @@ function updateFlow() {
             });
 
     } else {
-        console.log("Wrong directory, please use command inside flow directory");
+        logger.error("Wrong directory, please use command inside flow directory");
     }
 }
 
@@ -447,7 +468,7 @@ function commitFlow(flowId) {
 
         axios(config)
             .then(function (res) {
-                console.log('Flow committed successfully');
+                logger.info('Flow committed successfully');
                 cloneFlow(flow);
                 return res.data.versionsList.at(-1).id;
             })
@@ -459,7 +480,7 @@ function commitFlow(flowId) {
             });
     }
     else{
-        console.log("Wrong directory, please use command inside flow directory");
+        logger.error("Wrong directory, please use command inside flow directory");
     }
 }
 

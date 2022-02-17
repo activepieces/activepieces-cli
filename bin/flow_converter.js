@@ -1,63 +1,6 @@
-const Validator = require('jsonschema').Validator;
-
-const actionSchema = {
-    "type": "object",
-    "properties": {
-        "type": { "enum": ["CODE", "CONDITION"] },
-        "name": {"type": "string"},
-        "nextAction": {"type": "string"},
-        "onSuccessAction": {"type": "string"},
-        "onFailureAction": {"type": "string"},
-        "commonAction": {"type": "string"}
-    },
-    "allOf": [
-        {
-            "required": ["type", "name"]
-        },
-        {
-            "if": {
-                "properties": {
-                    "type": {"const": "CONDITION"}
-                },
-            },
-            "then": {
-                "properties": {
-                    "nextAction": false
-                },
-            }
-        },
-        {
-            "if": {
-                "properties": {
-                    "type": {"const": "CODE"}
-                },
-            },
-            "then": {
-                "properties": {
-                    "onSuccessAction": false,
-                    "onFailureAction": false,
-                    "commonAction": false
-                },
-            }
-        },
-    ]
-}
-let triggerSchema = {
-    "type": "object",
-    "properties": {
-        "type": { "enum": ["EVENT"] },
-        "nextAction": {"type": "string"},
-    },
-
-}
-let v = new Validator();
-
 module.exports.convertFlowJSON = (flow) => {
-    let newFlow = {};
-    newFlow.displayName = flow.displayName;
-    newFlow.description = flow.description;
-    newFlow.name = flow.name;
-    newFlow.variables = flow.variables;
+    let newFlow = JSON.parse(JSON.stringify(flow));
+    newFlow.action = undefined;
     if(!flow.trigger) {
         throw 'Error in flow.json format - trigger is required';
     }
@@ -66,17 +9,6 @@ module.exports.convertFlowJSON = (flow) => {
 }
 
 function convertFlowActions(curState, actions, type) {
-
-    if(type === "trigger" ){
-        if(!v.validate(curState, triggerSchema).valid) {
-            throw 'Error in flow.json format - trigger schema';
-        }
-    }
-    if(type === "action" ){
-        if(!v.validate(curState, actionSchema).valid) {
-            throw 'Error in flow.json format - actions schema';
-        }
-    }
 
     if(curState.hasOwnProperty('nextAction')) {
         let found = false;

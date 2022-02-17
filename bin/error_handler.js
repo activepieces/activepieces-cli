@@ -1,3 +1,5 @@
+const logger = require('node-color-log');
+
 let verbose;
 module.exports.init = (_verbose) => {
     verbose = _verbose;
@@ -5,25 +7,28 @@ module.exports.init = (_verbose) => {
 module.exports.printError = (err) => {
     if (err.response?.status) {
         let code = err.response.status;
+
         switch (code) {
             case 401:
             case 403:
-                console.log("Error: Forbidden - unauthorized access");
-                console.log("Is your api key correct?");
+                logger.error("Error: Forbidden - unauthorized access");
+                logger.error("Is your api key correct?");
                 break;
             case 500:
-                console.log("Opps, internal error :(");
-                console.log("Please try again or report it to us, thanks!");
+                logger.error("Opps, internal error :(");
+                logger.error("Please try again or report it to us, thanks!");
                 break;
             case 400:
-                console.log("Bad request!");
+                logger.error("Bad request!");
                 if (err.response.data && !verbose) {
-                    console.log(err.response.data);
+                    logger.error(err.response.data);
                 }
                 break;
         }
+    }else {
+        logger.error("Couldn't reach the server!");
     }
     if (verbose){
-        console.log(err);
+        logger.error(err);
     }
 }

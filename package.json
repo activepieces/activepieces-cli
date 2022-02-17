@@ -19,6 +19,7 @@
     "findup-sync": "^5.0.0",
     "form-data": "^4.0.0",
     "jsonschema": "^1.4.0",
+    "node-color-log": "^7.0.0",
     "prompts": "^2.4.2",
     "yargs": "^17.3.1"
   }
