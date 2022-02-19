@@ -151,15 +151,20 @@ function projectInit() {
 }
 
 function updatePieceRequest(piece) {
-
+    const bodyFormData = new FormData();
+    bodyFormData.append('piece', JSON.stringify(piece.version), {contentType: 'application/json'});
+    if (fs.existsSync("logo.jpg")) {
+        bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
+    }
     return new Promise( (resolve, reject) => {
         const config = {
             method: 'put',
             url: host + '/pieces/' + piece.pieceId,
             headers: {
-                'Authorization': 'Bearer ' + project.apiKey
+                'Authorization': 'Bearer ' + project.apiKey,
+                ...bodyFormData.getHeaders()
             },
-            data: piece.version
+            data: bodyFormData
         };
 
         axios(config)
@@ -286,43 +291,59 @@ function publishPiece(environment_name) {
 }
 
 function createPiece(piece_name) {
-
-    var data = {
-        "pieceType": "INTEGRATION",
-        "version": {
-            "name": piece_name,
-            "description": piece_name + " piece description",
-            "displayName": piece_name,
-            "pieceType": "INTEGRATION",
-            "flowsVersionId": []
+    prompts({
+        type: 'select',
+        name: 'pieceType',
+        message: 'Please select the piece type:',
+        choices: [
+            { title: 'Integration', value: 'INTEGRATION'},
+            { title: 'Connector', value: 'CONNECTOR' },
+        ],
+        initial: 1
+    }).then(piece_type => {
+        var data = {
+            "pieceType": piece_type,
+            "version": {
+                "name": piece_name,
+                "description": piece_name + " piece description",
+                "displayName": piece_name,
+                "pieceType": piece_type,
+                "flowsVersionId": []
+            }
         }
-    }
-    const config = {
-        method: 'post',
-        url: host+'/projects/' + project.projectId + '/pieces',
-        headers: {
-            'Authorization': 'Bearer ' + project.apiKey
-        },
-        data: data
-    };
+        const bodyFormData = new FormData();
+        bodyFormData.append('piece', JSON.stringify(data), {contentType: 'application/json'});
+        if (fs.existsSync("logo.jpg")) {
+            bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
+        }
+        const config = {
+            method: 'post',
+            url: host + '/projects/' + project.projectId + '/pieces',
+            headers: {
+                'Authorization': 'Bearer ' + project.apiKey,
+                ...bodyFormData.getHeaders()
+            },
+            data: bodyFormData
+        };
 
-    axios(config)
-        .then(function (res) {
-            fs.mkdir(path.join(process.cwd(), piece_name), (err) => {
-                if (err) {
-                    return logger.error(err);
-                }
-                data.pieceId = res.data.id;
-                fs.writeFile(path.join(process.cwd(), piece_name, "piece.json"), JSON.stringify(data, null, 2), (err) => {
-                        if (err) return logger.error(err);
-                        logger.info('Piece created successfully!');
+        axios(config)
+            .then(function (res) {
+                fs.mkdir(path.join(process.cwd(), piece_name), (err) => {
+                    if (err) {
+                        return logger.error(err);
                     }
-                );
+                    data.pieceId = res.data.id;
+                    fs.writeFile(path.join(process.cwd(), piece_name, "piece.json"), JSON.stringify(data, null, 2), (err) => {
+                            if (err) return logger.error(err);
+                            logger.info('Piece created successfully!');
+                        }
+                    );
+                });
+            })
+            .catch(function (err) {
+                errorHandler.printError(err);
             });
-        })
-        .catch(function (err) {
-            errorHandler.printError(err);
-        });
+    });
 }
 function createFlow(flow_name) {
     if (fs.existsSync('./piece.json')) {
@@ -389,11 +410,17 @@ function getFlowData(flow) {
             }
         });
     }
+    try {
+        let convertedFlow = flowConverter.convertFlowJSON(flow);
+        bodyFormData.append('flow', JSON.stringify(convertedFlow), {contentType: 'application/json'});
+        return bodyFormData;
 
-    let convertedFlow = flowConverter.convertFlowJSON(flow);
-    bodyFormData.append('flow', JSON.stringify(convertedFlow), {contentType: 'application/json'});
+    }catch (err) {
+        logger.error(err);
+        return null;
+    }
 
-    return bodyFormData;
+
 }
 
 function updateFlow() {
@@ -401,7 +428,8 @@ function updateFlow() {
 
         let flow = JSON.parse(fs.readFileSync('./flow.json'));
         const flowData = getFlowData(flow);
-
+        if (!flowData)
+            return;
         const config = {
             method: 'put',
             url: host + '/flows/' + flow.flowId + '/versions/latest',

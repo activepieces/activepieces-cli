@@ -1,11 +1,25 @@
+const {action} = require("prompts/lib/util");
 module.exports.convertFlowJSON = (flow) => {
     let newFlow = JSON.parse(JSON.stringify(flow));
+    if (!checkUniqueActionNames(flow.actions)) {
+        throw 'Error in flow.json format - action names must be unique';
+    }
     newFlow.action = undefined;
     if(!flow.trigger) {
         throw 'Error in flow.json format - trigger is required';
     }
     newFlow.trigger =  convertFlowActions(flow.trigger,flow.actions, "trigger");
    return newFlow;
+}
+
+function checkUniqueActionNames(actions) {
+    let s = new Set();
+    actions.forEach(action => {
+       if(s.has(action.name))
+           return false;
+       s.add(action.name);
+    });
+    return true;
 }
 
 function convertFlowActions(curState, actions, type) {
