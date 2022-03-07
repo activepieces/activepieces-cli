@@ -34,15 +34,17 @@ function parseInputCommand() {
                     functionToExec = createPiece;
                     functionInput = argv.piece_name;
                 })
-                .command('update', 'Commits all changes piece', () => {
+                .command('publish', 'Publish piece to activepieces', () => {
                 }, () => {
-                    functionToExec = updatePieceWrapper;
+                    functionToExec = publishPieceWrapper;
                 })
-                .command('publish <environment>', 'Push piece to environment', () => {
+                .command('deploy <environment>', 'Deploy piece to environment', () => {
                 }, (argv) => {
-                    functionToExec = publishPiece;
+                    functionToExec = deployPiece;
                     functionInput = argv.environment;
                 })
+
+
         })
         .command('flow <flow_action>', 'Flow commands', (yargs) => {
             return yargs
@@ -74,6 +76,11 @@ function parseInputCommand() {
             type: 'boolean',
             description: "Run on local environment"
         })
+        .option('staging', {
+            alias: 's',
+            type: 'boolean',
+            description: "Run on staging environment"
+        })
         .strictCommands()
         .alias('help', 'h')
         .parse()
@@ -95,10 +102,12 @@ function beautify(data) {
 }
 
 function getHost() {
-    if(argv.local) {
-        host = environment.local_host;
-    }else {
+    if(argv.staging){
         host = environment.staging_host;
+    }else if (argv.local) {
+        host = environment.local_host;
+    } else {
+        host = environment.production_host;
     }
 }
 
@@ -108,9 +117,8 @@ function setup() {
         errorHandler.init(argv.verbose);
         getHost();
         if(needProjectData){
-            getProjectData();
+           getProjectData();
         }
-
         functionToExec(functionInput);
     });
 }
@@ -150,7 +158,7 @@ function projectInit() {
     });
 }
 
-function updatePieceRequest(piece) {
+function publishPieceRequest(piece) {
     const bodyFormData = new FormData();
     bodyFormData.append('piece', JSON.stringify(piece.version), {contentType: 'application/json'});
     if (fs.existsSync("logo.jpg")) {
@@ -176,7 +184,7 @@ function updatePieceRequest(piece) {
     });
 }
 
-function updatePiece() {
+function publishPiece() {
     return new Promise((resolve, reject) => {
         if (fs.existsSync('./piece.json')) {
             let rawdata = fs.readFileSync('./piece.json');
@@ -193,17 +201,17 @@ function updatePiece() {
             axios(config)
                 .then(function (res) {
                     res.data.data.forEach(flow => {
-                        flowsVersionId.push(flow.versionsList.at(-1).id);
+                        flowsVersionId.push(flow.versionsList.at(-1));
                     });
                     piece.version.flowsVersionId = flowsVersionId;
 
-                    updatePieceRequest(piece).then(function (updatePieceResponse) {
+                    publishPieceRequest(piece).then(function (publishPieceResponse) {
                         fs.writeFile('./piece.json', JSON.stringify(piece, null, 2), function writeJSON(err) {
                             if (err) {
                                 logger.error(err);
                             }
                         });
-                        resolve(updatePieceResponse);
+                        resolve(publishPieceResponse);
                     }).catch((err) => {
                         reject(err);
                     });
@@ -216,9 +224,9 @@ function updatePiece() {
     });
 }
 
-function updatePieceWrapper() {
-    updatePiece().then(res => {
-        logger.info("Piece updated successfully");
+function publishPieceWrapper() {
+    publishPiece().then(res => {
+        logger.info("Piece published successfully");
         if (argv.verbose) {
             logger.info(beautify(res.data));
         }
@@ -244,8 +252,35 @@ function getEnvironmentId(environment_name) {
     });
 
 }
-function publishPiece(environment_name) {
-    updatePiece().then(res => {
+
+function getPieceData(pieceId) {
+    return new Promise((resolve, reject) => {
+        if (fs.existsSync('./piece.json')) {
+            let rawdata = fs.readFileSync('./piece.json');
+            let piece = JSON.parse(rawdata);
+
+            const config = {
+                method: 'get',
+                url: host + '/pieces/' + piece.pieceId ,
+                headers: {
+                    'Authorization': 'Bearer ' + project.apiKey
+                }
+            };
+
+            axios(config).then((res) => {
+                resolve(res);
+            }).catch((err) => {
+                reject(err);
+            });
+
+        }else {
+            reject('Wrong directory, please use command inside piece directory');
+        }
+    });
+}
+
+function deployPiece(environment_name) {
+    getPieceData().then(res => {
         let latestVersion = res.data.versionsList.at(-1);
         getEnvironmentId(environment_name).then((environment) => {
             let found = false;
@@ -265,7 +300,7 @@ function publishPiece(environment_name) {
 
             const config = {
                 method: 'put',
-                url: host+'/environments/' + environment.id,
+                url: host + '/environments/' + environment.id,
                 headers: {
                     'Authorization': 'Bearer ' + project.apiKey
                 },
@@ -296,55 +331,68 @@ function createPiece(piece_name) {
         name: 'pieceType',
         message: 'Please select the piece type:',
         choices: [
-            { title: 'Integration', value: 'INTEGRATION'},
-            { title: 'Connector', value: 'CONNECTOR' },
+            {title: 'Integration', value: 'INTEGRATION'},
+            {title: 'Connector', value: 'CONNECTOR'},
         ],
-        initial: 1
+        initial: 0
     }).then(piece_type => {
-        var data = {
-            "pieceType": piece_type,
-            "version": {
+        prompts({
+            type: 'select',
+            name: 'visibility',
+            message: 'Please select the visibility:',
+            choices: [
+                {title: 'Private', value: 'PRIVATE'},
+                {title: 'Public', value: 'PUBLIC'},
+            ],
+            initial: 0
+        }).then(visibility => {
+            var data = {
                 "name": piece_name,
-                "description": piece_name + " piece description",
-                "displayName": piece_name,
-                "pieceType": piece_type,
-                "flowsVersionId": []
+                "type": piece_type.pieceType,
+                "visibility": visibility.visibility,
+                "version": {
+                    "description": piece_name + " piece description",
+                    "displayName": piece_name,
+                    "flowsVersionId": []
+                }
             }
-        }
-        const bodyFormData = new FormData();
-        bodyFormData.append('piece', JSON.stringify(data), {contentType: 'application/json'});
-        if (fs.existsSync("logo.jpg")) {
-            bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
-        }
-        const config = {
-            method: 'post',
-            url: host + '/projects/' + project.projectId + '/pieces',
-            headers: {
-                'Authorization': 'Bearer ' + project.apiKey,
-                ...bodyFormData.getHeaders()
-            },
-            data: bodyFormData
-        };
+            const bodyFormData = new FormData();
+            bodyFormData.append('piece', JSON.stringify(data), {contentType: 'application/json'});
+            if (fs.existsSync("logo.jpg")) {
+                bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
+            }
+            const config = {
+                method: 'post',
+                url: host + '/projects/' + project.projectId + '/pieces',
+                headers: {
+                    'Authorization': 'Bearer ' + project.apiKey,
+                    ...bodyFormData.getHeaders()
+                },
+                data: bodyFormData
+            };
 
-        axios(config)
-            .then(function (res) {
-                fs.mkdir(path.join(process.cwd(), piece_name), (err) => {
-                    if (err) {
-                        return logger.error(err);
-                    }
-                    data.pieceId = res.data.id;
-                    fs.writeFile(path.join(process.cwd(), piece_name, "piece.json"), JSON.stringify(data, null, 2), (err) => {
-                            if (err) return logger.error(err);
-                            logger.info('Piece created successfully!');
+            axios(config)
+                .then(function (res) {
+                    fs.mkdir(path.join(process.cwd(), piece_name), (err) => {
+                        if (err) {
+                            return logger.error(err);
                         }
-                    );
+                        data.pieceId = res.data.id;
+                        fs.writeFile(path.join(process.cwd(), piece_name, "piece.json"), JSON.stringify(data, null, 2), (err) => {
+                                if (err) return logger.error(err);
+                                logger.info('Piece created successfully!');
+                            }
+                        );
+                    });
+                })
+                .catch(function (err) {
+                    errorHandler.printError(err);
                 });
-            })
-            .catch(function (err) {
-                errorHandler.printError(err);
-            });
+        });
     });
 }
+
+
 function createFlow(flow_name) {
     if (fs.existsSync('./piece.json')) {
 
@@ -352,14 +400,16 @@ function createFlow(flow_name) {
         const piece = JSON.parse(rawdata);
         let data = {
             "name": flow_name,
-            "displayName": flow_name,
-            "description": flow_name + "flow description",
-            "actions": [],
-            "variables": [],
+            "version": {
+                "displayName": flow_name,
+                "description": flow_name + "flow description",
+                "actions": [],
+                "configs": [],
+                "output": {}
+            }
         };
         const bodyFormData = new FormData();
         bodyFormData.append('flow', JSON.stringify(data), {contentType: 'application/json'});
-        // bodyFormData.append('artifacts', []);
         const config = {
             method: 'post',
             url: host + '/pieces/' + piece.pieceId + '/flows',
@@ -376,9 +426,11 @@ function createFlow(flow_name) {
                     if (err) {
                         return logger.error(err);
                     }
-                    data.flowId = res.data.id;
-                    data.trigger = {};
-                    fs.writeFile(path.join(process.cwd(), flow_name, "flow.json"), JSON.stringify(data, null, 2), (err) => {
+                    let writtenData = data.version;
+                    writtenData.flowId = res.data.id;
+                    writtenData.name = data.name;
+                    writtenData.trigger = {};
+                    fs.writeFile(path.join(process.cwd(), flow_name, "flow.json"), JSON.stringify(writtenData, null, 2), (err) => {
                             if (err) return logger.error(err);
                             logger.info('Flow created successfully!');
                         }
@@ -388,7 +440,7 @@ function createFlow(flow_name) {
             .catch(function (err) {
                 errorHandler.printError(err);
             });
-    }else {
+    } else {
         logger.error("Wrong directory, please use command inside piece directory");
     }
 }
@@ -406,7 +458,7 @@ function getFlowData(flow) {
                 });
                 zip = new AdmZip();
                 zip.addLocalFolder(filePath, file);
-                bodyFormData.append('artifacts',zip.toBuffer(),file+'.zip');
+                bodyFormData.append('artifacts', zip.toBuffer(), file + '.zip');
             }
         });
     }
@@ -415,12 +467,10 @@ function getFlowData(flow) {
         bodyFormData.append('flow', JSON.stringify(convertedFlow), {contentType: 'application/json'});
         return bodyFormData;
 
-    }catch (err) {
+    } catch (err) {
         logger.error(err);
         return null;
     }
-
-
 }
 
 function updateFlow() {
