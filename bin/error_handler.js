@@ -4,6 +4,12 @@ let verbose;
 module.exports.init = (_verbose) => {
     verbose = _verbose;
 }
+
+function beautify(data) {
+    return JSON.stringify(data, null, 2);
+}
+
+
 module.exports.printError = (err) => {
     if (err.response?.status) {
         let code = err.response.status;
@@ -21,7 +27,7 @@ module.exports.printError = (err) => {
             case 400:
                 logger.error("Bad request!");
                 if (err.response.data && !verbose) {
-                    logger.error(err.response.data);
+                    logger.error(beautify(err.response.data));
                 }
                 break;
         }
