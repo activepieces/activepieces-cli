@@ -24,7 +24,6 @@ function checkUniqueActionNames(actions) {
 }
 
 function convertFlowActions(curState, actions, type) {
-
     if(curState.hasOwnProperty('nextAction')) {
         let found = false;
         actions.forEach(action => {

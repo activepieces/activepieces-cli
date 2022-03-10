@@ -19,89 +19,43 @@ module.exports.init = (_verbose, _host, _api_key, _project_id) => {
     errorHandler.init(_verbose);
 }
 
-module.exports.createPiece = async (piece_name) => {
-    prompts({
-        type: 'select',
-        name: 'pieceType',
-        message: 'Please select the piece type:',
-        choices: [{
-            title: 'Integration',
-            value: 'INTEGRATION'
-        },
-            {
-                title: 'Connector',
-                value: 'CONNECTOR'
-            },
-        ],
-        initial: 0
-    }).then(async pieceTypeSelector => {
-        let visibility = 'PUBLIC';
-        let pieceType = pieceTypeSelector.pieceType;
-        if (pieceType === 'CONNECTOR') {
-            visibility_selector = await prompts({
-                type: 'select',
-                name: 'visibility',
-                message: 'Please select the visibility:',
-                choices: [{
-                    title: 'Private',
-                    value: 'PRIVATE'
-                },
-                    {
-                        title: 'Public',
-                        value: 'PUBLIC'
-                    },
-                ],
-                initial: 0
-            });
-            visibility = visibility_selector.visibility;
-        }
-        createPieceHelper(piece_name, visibility, pieceType);
-    });
-}
-
-module.exports.updatePiece = () => {
+module.exports.createFlow = (flow_name) => {
     if (fs.existsSync('./piece.json')) {
-        let piece = JSON.parse(fs.readFileSync('./piece.json'));
-        updatePieceHelper(piece.id, piece.version).then(savedPiece => {
-            fs.writeFile(path.join(process.cwd(), "piece.json"), beautify(savedPiece), (err) => {
-                if (err) {
-                    errorHandler.printError(err);
-                }
-                logger.info("Piece Updated successfully");
-            });
-        }).catch(err => {
-            errorHandler.printError(err);
-        });
-    } else {
-        errorHandler.printError('Wrong directory, please use command inside piece directory');
-    }
-}
-
-module.exports.publishPiece = async () => {
-    if (fs.existsSync('./piece.json')) {
-        let piece = JSON.parse(fs.readFileSync('./piece.json'));
-        if (piece.version.state === 'DRAFT') {
-            await updatePieceHelper(piece.id, piece.version);
-            logger.info("Piece Updated successfully");
-        }
-        let pieceId = piece.id;
-        let config = {
+        const piece = JSON.parse(fs.readFileSync('./piece.json'));
+        let flowData = {
+            "name": flow_name,
+            "version": {
+                "displayName": flow_name,
+                "description": flow_name + "flow description",
+                "actions": [],
+                "configs": [],
+                "output": {}
+            }
+        };
+        const bodyFormData = new FormData();
+        bodyFormData.append('flow', JSON.stringify(flowData), {contentType: 'application/json'});
+        const config = {
             method: 'post',
-            url: host + '/pieces/' + pieceId + '/commit',
+            url: host + '/pieces/' + piece.id + '/flows',
             headers: {
                 'Authorization': 'Bearer ' + api_key,
+                ...bodyFormData.getHeaders()
             },
+            data: bodyFormData
         };
+
         axios(config)
             .then(function (res) {
-                let savedPiece = JSON.parse(JSON.stringify(res.data));
-                savedPiece.lastVersion = undefined;
-                savedPiece.version = res.data.lastVersion;
-                fs.writeFile(path.join(process.cwd(), "piece.json"), beautify(savedPiece), (err) => {
+                fs.mkdir(path.join(process.cwd(), flow_name), (err) => {
                     if (err) {
-                        errorHandler.printError(err);
+                        return logger.error(err);
                     }
-                    logger.info('Piece published successfully');
+                    let writtenData = restructFlow(res.data);
+                    fs.writeFile(path.join(process.cwd(), flow_name, "flow.json"), beautify(writtenData), (err) => {
+                            if (err) return logger.error(err);
+                            logger.info('Flow created successfully!');
+                        }
+                    );
                 });
             })
             .catch(function (err) {
@@ -112,169 +66,20 @@ module.exports.publishPiece = async () => {
     }
 }
 
-module.exports.deployPiece = async (environment_name) => {
-    if (!fs.existsSync('./piece.json')) {
-        logger.error("Wrong directory, please use command inside piece directory");
-    }else {
-        let piece = JSON.parse(fs.readFileSync('./piece.json'));
-        let latestVersion = piece.version.id;
-        if(piece.version.state === 'DRAFT'){
-            latestVersion = piece.versionsList.at(-2);
-        }
-        getEnvironmentId(environment_name).then((environment) => {
-            let found = false;
-            environment.deployedPieces.forEach(pieceItem => {
-                if (pieceItem.pieceId === piece.id) {
-                    found = true;
-                    pieceItem.pieceVersionsId = [latestVersion];
-                }
-            });
-            if (!found) {
-                environment.deployedPieces.push({
-                    "pieceId": piece.id,
-                    "pieceVersionsId": [latestVersion]
-                });
-            }
+function restructFlow(flow){
+    let writtenData = JSON.parse(JSON.stringify(flow));
+    writtenData.lastVersion = undefined
+    writtenData.epochCreationTime = undefined;
+    writtenData.epochUpdateTime = undefined;
+    writtenData.archived = undefined;
 
-            const config = {
-                method: 'put',
-                url: host + '/environments/' + environment.id,
-                headers: {
-                    'Authorization': 'Bearer ' + api_key
-                },
-                data: environment
-            };
-
-            axios(config).then((res) => {
-                logger.info("Piece deployed successfully to the environment " + environment_name);
-                if (verbose) {
-                    logger.info(beautify(res.data));
-                }
-            }).catch((err) => {
-                errorHandler.printError(err);
-            });
-        }).catch(err => {
-            errorHandler.printError(err);
-        });
-    }
+    writtenData.version = flow.lastVersion;
+    writtenData.version.flowId = undefined;
+    writtenData.version.epochCreationTime = undefined;
+    writtenData.version.epochUpdateTime = undefined;
+    writtenData.version.trigger = {};
+    return writtenData;
 }
-
-function getEnvironmentId(environment_name) {
-    return new Promise((resolve, reject) => {
-        const config = {
-            method: 'get',
-            url: host + '/projects/' + project_id + '/environments/' + environment_name,
-            headers: {
-                'Authorization': 'Bearer ' + api_key
-            },
-        };
-        axios(config).then((res) => {
-            resolve(res.data);
-        }).catch((err) => {
-            reject(err);
-        });
-    });
-
-}
-
-function createPieceHelper(piece_name, visibility, piece_type) {
-    if (!fs.existsSync('./project.json')) {
-        logger.error("Wrong directory, please use command inside project directory");
-    } else {
-        const piece = {
-            "name": piece_name,
-            "type": piece_type,
-            "visibility": visibility,
-            "version": {
-                "dependencies": [],
-                "configs": [],
-                "description": "Short description about piece",
-                "displayName": piece_name,
-                "flowsVersionId": []
-            }
-        };
-
-        createPiece(piece).then(savedPiece => {
-            fs.mkdir(path.join(process.cwd(), piece_name), (err) => {
-                if (err) {
-                    errorHandler.printError(err);
-                } else {
-                    fs.writeFile(path.join(process.cwd(), piece_name, "piece.json"), beautify(savedPiece), (err) => {
-                        if (err) {
-                            errorHandler.printError(err);
-                        }
-                        logger.info("Piece Created successfully");
-                    });
-                }
-            });
-            if (verbose) {
-                logger.info(beautify(savedPiece));
-            }
-        }).catch(err => {
-            errorHandler.printError(err);
-        });
-    }
-}
-
-function updatePieceHelper(piece_id, request_data) {
-    return new Promise((resolve, reject) => {
-        const bodyFormData = new FormData();
-        bodyFormData.append('piece', JSON.stringify(request_data), {
-            contentType: 'application/json'
-        });
-        if (fs.existsSync("logo.jpg")) {
-            bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
-        }
-        const config = {
-            method: 'put',
-            url: host + '/pieces/' + piece_id,
-            headers: {
-                'Authorization': 'Bearer ' + api_key,
-                ...bodyFormData.getHeaders()
-            },
-            data: bodyFormData
-        };
-
-        axios(config)
-            .then(function (res) {
-                let savedPiece = JSON.parse(JSON.stringify(res.data));
-                savedPiece.lastVersion = undefined;
-                savedPiece.version = res.data.lastVersion;
-                resolve(savedPiece);
-            }).catch(function (err) {
-            reject(err);
-        });
-    });
-}
-
-function createPiece(request_data) {
-    return new Promise((resolve, reject) => {
-        const bodyFormData = new FormData();
-        bodyFormData.append('piece', JSON.stringify(request_data), {
-            contentType: 'application/json'
-        });
-        const config = {
-            method: 'post',
-            url: host + '/projects/' + project_id + '/pieces',
-            headers: {
-                'Authorization': 'Bearer ' + api_key,
-                ...bodyFormData.getHeaders()
-            },
-            data: bodyFormData
-        };
-
-        axios(config)
-            .then(function (res) {
-                let savedPiece = JSON.parse(JSON.stringify(res.data));
-                savedPiece.lastVersion = undefined;
-                savedPiece.version = res.data.lastVersion;
-                resolve(savedPiece);
-            }).catch(function (err) {
-            reject(err);
-        });
-    });
-}
-
 
 function beautify(data) {
     return JSON.stringify(data, null, 2);
