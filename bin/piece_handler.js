@@ -5,6 +5,8 @@ const logger = require('node-color-log');
 const errorHandler = require('./error_handler');
 const FormData = require('form-data');
 const axios = require('axios');
+const AdmZip = require("adm-zip");
+const flowHandler = require('./flow_handler');
 
 let verbose;
 let host;
@@ -35,27 +37,9 @@ module.exports.createPiece = async (piece_name) => {
         ],
         initial: 0
     }).then(async pieceTypeSelector => {
-        let visibility = 'PUBLIC';
+        let access = 'PRIVATE';
         let pieceType = pieceTypeSelector.pieceType;
-        if (pieceType === 'CONNECTOR') {
-            visibility_selector = await prompts({
-                type: 'select',
-                name: 'visibility',
-                message: 'Please select the visibility:',
-                choices: [{
-                    title: 'Private',
-                    value: 'PRIVATE'
-                },
-                    {
-                        title: 'Public',
-                        value: 'PUBLIC'
-                    },
-                ],
-                initial: 0
-            });
-            visibility = visibility_selector.visibility;
-        }
-        createPieceHelper(piece_name, visibility, pieceType);
+        createPieceHelper(piece_name, access, pieceType);
     });
 }
 
@@ -177,20 +161,20 @@ function getEnvironmentId(environment_name) {
 
 }
 
-function createPieceHelper(piece_name, visibility, piece_type) {
+function createPieceHelper(piece_name, access, piece_type) {
     if (!fs.existsSync('./project.json')) {
         logger.error("Wrong directory, please use command inside project directory");
     } else {
         const piece = {
             "name": piece_name,
             "type": piece_type,
-            "visibility": visibility,
             "version": {
                 "dependencies": [],
                 "configs": [],
                 "description": "Short description about piece",
                 "displayName": piece_name,
-                "flowsVersionId": []
+                "flowsVersionId": [],
+                "access": access,
             }
         };
 
@@ -216,31 +200,50 @@ function createPieceHelper(piece_name, visibility, piece_type) {
     }
 }
 
+function updateFlowsHelper(){
+    let promises = [];
+    let flows = fs.readdirSync(process.cwd());
+    flows.forEach((flow) => {
+        const flowPath = path.join(process.cwd(), flow);
+        const stat = fs.statSync(flowPath);
+        if (stat && stat.isDirectory()) { // flows should be inside directory
+            promises.push(flowHandler.updateFlow(flowPath));
+        }
+
+    });
+    return promises;
+}
+
 function updatePieceHelper(piece_id, request_data) {
     return new Promise((resolve, reject) => {
-        const bodyFormData = new FormData();
-        bodyFormData.append('piece', JSON.stringify(request_data), {
-            contentType: 'application/json'
-        });
-        if (fs.existsSync("logo.jpg")) {
-            bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
-        }
-        const config = {
-            method: 'put',
-            url: host + '/pieces/' + piece_id,
-            headers: {
-                'Authorization': 'Bearer ' + api_key,
-                ...bodyFormData.getHeaders()
-            },
-            data: bodyFormData
-        };
+        Promise.all(updateFlowsHelper()).then(data => {
+            const bodyFormData = new FormData();
+            bodyFormData.append('piece', JSON.stringify(request_data), {
+                contentType: 'application/json'
+            });
+            if (fs.existsSync("logo.jpg")) {
+                bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
+            }
+            const config = {
+                method: 'put',
+                url: host + '/pieces/' + piece_id,
+                headers: {
+                    'Authorization': 'Bearer ' + api_key,
+                    ...bodyFormData.getHeaders()
+                },
+                data: bodyFormData
+            };
 
-        axios(config)
-            .then(function (res) {
-                resolve(restruct(res.data));
-            }).catch(function (err) {
+            axios(config)
+                .then(function (res) {
+                    resolve(restruct(res.data));
+                }).catch(function (err) {
+                reject(err);
+            });
+        }).catch(err => {
             reject(err);
-        });
+        })
+
     });
 }
 

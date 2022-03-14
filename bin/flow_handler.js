@@ -5,6 +5,9 @@ const logger = require('node-color-log');
 const errorHandler = require('./error_handler');
 const FormData = require('form-data');
 const axios = require('axios');
+const AdmZip = require("adm-zip");
+const flowConverter = require("./flow_converter");
+const child_process = require('child_process');
 
 let verbose;
 let host;
@@ -29,7 +32,8 @@ module.exports.createFlow = (flow_name) => {
                 "description": flow_name + "flow description",
                 "actions": [],
                 "configs": [],
-                "output": {}
+                "output": {},
+                "access": 'PRIVATE'
             }
         };
         const bodyFormData = new FormData();
@@ -64,6 +68,73 @@ module.exports.createFlow = (flow_name) => {
     } else {
         logger.error("Wrong directory, please use command inside piece directory");
     }
+}
+
+function getFlowData(flowVersion, flow_path) {
+    const bodyFormData = new FormData();
+    if (fs.existsSync(path.join(flow_path, 'code'))) {
+        let files = fs.readdirSync(path.join(flow_path, 'code'));
+        files.forEach((file) => {
+            const filePath = path.join(flow_path, 'code', file);
+            const stat = fs.statSync(filePath);
+            if (stat && stat.isDirectory()) {
+                child_process.execSync('npm install', {
+                    cwd: filePath
+                });
+                zip = new AdmZip();
+                zip.addLocalFolder(filePath, file);
+                bodyFormData.append('artifacts', zip.toBuffer(), file + '.zip');
+            }
+        });
+    }
+    try {
+        let convertedFlowVersion = flowConverter.convertFlowJSON(flowVersion);
+        bodyFormData.append('flow', JSON.stringify(convertedFlowVersion), {contentType: 'application/json'});
+        return bodyFormData;
+
+    } catch (err) {
+        logger.error(err);
+        return null;
+    }
+}
+
+
+module.exports.updateFlow = (flow_path) => {
+    return new Promise((resolve, reject) => {
+        if (fs.existsSync(path.join(flow_path,'flow.json'))) {
+            let flow = JSON.parse(fs.readFileSync(path.join(flow_path,'flow.json')));
+            const flowData = getFlowData(flow.version, flow_path);
+            if (!flowData) {
+                reject();
+            }
+            const config = {
+                method: 'put',
+                url: host + '/flows/' + flow.id + '/versions/latest',
+                headers: {
+                    'Authorization': 'Bearer ' + api_key,
+                    ...flowData.getHeaders()
+                },
+                maxContentLength: 100000000,
+                maxBodyLength: 1000000000,
+                data: flowData
+            };
+
+            axios(config)
+                .then(function (res) {
+                    logger.info(flow.name + " flow updated successfully");
+                    if (verbose) {
+                        logger.info(beautify(res.data));
+                    }
+                    resolve(res);
+                })
+                .catch(function (err) {
+                    reject(err);
+                });
+
+        } else {
+            reject(flow.name + "missing flow.json file");
+        }
+    });
 }
 
 function restructFlow(flow){

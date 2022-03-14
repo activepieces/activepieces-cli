@@ -4,16 +4,17 @@ module.exports.convertFlowJSON = (flow) => {
     if (!checkUniqueActionNames(flow.actions)) {
         throw 'Error in flow.json format - action names must be unique';
     }
-    newFlow.action = undefined;
+    newFlow.actions = undefined;
     if(!flow.trigger) {
         throw 'Error in flow.json format - trigger is required';
     }
     newFlow.trigger =  convertFlowActions(flow.trigger,flow.actions, "trigger");
-
    return newFlow;
 }
 
 function checkUniqueActionNames(actions) {
+    if (!actions)
+        return true;
     let s = new Set();
     actions.forEach(action => {
        if(s.has(action.name))
@@ -24,7 +25,7 @@ function checkUniqueActionNames(actions) {
 }
 
 function convertFlowActions(curState, actions, type) {
-    if(curState.hasOwnProperty('nextAction')) {
+    if(curState.hasOwnProperty('nextAction') && actions) {
         let found = false;
         actions.forEach(action => {
             if (action.name === curState.nextAction) {

@@ -5,7 +5,6 @@ const path = require('path');
 const environment = require("./environment");
 const FormData = require('form-data');
 const axios = require('axios');
-const child_process = require('child_process');
 const AdmZip = require('adm-zip');
 const flowConverter = require('./flow_converter');
 const errorHandler = require('./error_handler');
@@ -172,8 +171,8 @@ async function createPiece(piece_name) {
     await pieceHandler.createPiece(piece_name);
 }
 
-function updatePiece() {
-    pieceHandler.updatePiece();
+async function updatePiece() {
+    await pieceHandler.updatePiece();
 }
 
 function publishPiece() {
@@ -183,78 +182,6 @@ function publishPiece() {
 function createFlow(flow_name) {
     flowHandler.createFlow(flow_name);
 }
-
-function getFlowData(flow) {
-    const bodyFormData = new FormData();
-    if (fs.existsSync('./code')) {
-        let files = fs.readdirSync(path.join(process.cwd(), 'code'));
-        files.forEach((file) => {
-            const filePath = path.join(process.cwd(), 'code', file);
-            const stat = fs.statSync(filePath);
-            if (stat && stat.isDirectory()) {
-                child_process.execSync('npm install', {
-                    cwd: filePath
-                });
-                zip = new AdmZip();
-                zip.addLocalFolder(filePath, file);
-                bodyFormData.append('artifacts', zip.toBuffer(), file + '.zip');
-            }
-        });
-    }
-    try {
-        let convertedFlow = flowConverter.convertFlowJSON(flow);
-        bodyFormData.append('flow', JSON.stringify(convertedFlow), {contentType: 'application/json'});
-        return bodyFormData;
-
-    } catch (err) {
-        logger.error(err);
-        return null;
-    }
-}
-
-function updateFlow() {
-    if (fs.existsSync('./flow.json')) {
-
-        let flow = JSON.parse(fs.readFileSync('./flow.json'));
-        const flowData = getFlowData(flow);
-        if (!flowData)
-            return;
-        const config = {
-            method: 'put',
-            url: host + '/flows/' + flow.flowId + '/versions/latest',
-            headers: {
-                'Authorization': 'Bearer ' + project.apiKey,
-                ...flowData.getHeaders()
-            },
-            maxContentLength: 100000000,
-            maxBodyLength: 1000000000,
-            data: flowData
-        };
-
-        axios(config)
-            .then(function (res) {
-                logger.info("Flow updated successfully");
-                if (argv.verbose) {
-                    logger.info(beatify(res.data));
-                }
-
-            })
-            .catch(function (err) {
-                if (err.response?.data?.errorCode === 'flow_version_locked') {
-                    if (argv.verbose) {
-                        logger.debug('flow version locked, cloning flow..');
-                    }
-                    cloneFlow(flow.flowId, true);
-                } else {
-                    errorHandler.printError(err);
-                }
-            });
-
-    } else {
-        logger.error("Wrong directory, please use command inside flow directory");
-    }
-}
-
 
 function commitFlow(flowId) {
     if (flowId || fs.existsSync('./flow.json')) {
