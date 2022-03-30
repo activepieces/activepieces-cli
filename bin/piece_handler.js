@@ -216,34 +216,33 @@ function updateFlowsHelper(){
 
 function updatePieceHelper(piece_id, request_data) {
     return new Promise((resolve, reject) => {
-        Promise.all(updateFlowsHelper()).then(data => {
-            const bodyFormData = new FormData();
-            bodyFormData.append('piece', JSON.stringify(request_data), {
-                contentType: 'application/json'
-            });
-            if (fs.existsSync("logo.jpg")) {
-                bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
-            }
-            const config = {
-                method: 'put',
-                url: host + '/pieces/' + piece_id,
-                headers: {
-                    'Authorization': 'Bearer ' + api_key,
-                    ...bodyFormData.getHeaders()
-                },
-                data: bodyFormData
-            };
-
-            axios(config)
-                .then(function (res) {
-                    resolve(restruct(res.data));
-                }).catch(function (err) {
-                reject(err);
-            });
-        }).catch(err => {
+        const bodyFormData = new FormData();
+        bodyFormData.append('piece', JSON.stringify(request_data), {
+            contentType: 'application/json'
+        });
+        if (fs.existsSync("logo.jpg")) {
+            bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
+        }
+        const config = {
+            method: 'put',
+            url: host + '/pieces/' + piece_id,
+            headers: {
+                'Authorization': 'Bearer ' + api_key,
+                ...bodyFormData.getHeaders()
+            },
+            data: bodyFormData
+        };
+        axios(config)
+            .then(function (res) {
+                let piece_data = restruct(res.data);
+                Promise.all(updateFlowsHelper()).then(data => {
+                    resolve(piece_data);
+                }).catch(err => {
+                    reject(err);
+                })
+            }).catch(function (err) {
             reject(err);
-        })
-
+        });
     });
 }
 
