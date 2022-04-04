@@ -56,10 +56,6 @@ function parseInputCommand() {
                     functionToExec = createFlow;
                     functionInput = argv.flow_name;
                 })
-                .command('update', 'Updates current version of flow - saves changes', () => {
-                }, () => {
-                    functionToExec = updateFlow;
-                })
                 .command('commit', 'Commits current version of flow ', () => {
                 }, () => {
                     functionToExec = commitFlow;
