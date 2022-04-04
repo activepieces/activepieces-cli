@@ -11,7 +11,7 @@ function beautify(data) {
 }
 
 module.exports.printError = (err) => {
-    if (err && err.response && err.response?.status) {
+    if (err && err?.response && err.response?.status) {
         let code = err.response.status;
         switch (code) {
             case 401:
@@ -39,6 +39,6 @@ module.exports.printError = (err) => {
         }
     }else {
         logger.error("Couldn't reach the server!");
-        logger.error(err);
+        logger.error(err.toString());
     }
 }
