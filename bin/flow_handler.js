@@ -174,7 +174,10 @@ module.exports.createCodeAction = (action_name)=>{
 function createCodeActionFolder(action_name) {
 
     fs.mkdirSync(path.join(process.cwd(), 'code', action_name));
-    let writtenData = 'exports.codePiece = async (context) => {};'
+    let writtenData = 'exports.codePiece = async (context) => {\n' +
+        '\t// context contains the object passed by the input in flow.json\n' +
+        '\t// write your code here\n' +
+        '};'
     fs.writeFileSync(path.join(process.cwd(), 'code', action_name, 'index.js'), writtenData);
     writtenData = {};
     writtenData.dependencies = {};
@@ -189,6 +192,7 @@ function restructFlow(flow){
     writtenData.archived = undefined;
 
     writtenData.version = flow.lastVersion;
+    writtenData.version.actions = [];
     writtenData.version.flowId = undefined;
     writtenData.version.epochCreationTime = undefined;
     writtenData.version.epochUpdateTime = undefined;

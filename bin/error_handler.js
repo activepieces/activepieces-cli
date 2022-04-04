@@ -38,7 +38,7 @@ module.exports.printError = (err) => {
                 break;
         }
     }else {
-        logger.error("Couldn't reach the server!");
+        logger.error("Error");
         logger.error(err.toString());
     }
 }
