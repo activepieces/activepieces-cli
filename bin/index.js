@@ -65,6 +65,14 @@ function parseInputCommand() {
                     functionToExec = commitFlow;
                 })
         })
+        .command('action <action_type>','action commands',(yargs) => {
+            return yargs
+                .command('code create <action_name>', 'Creates default template for a code action', () => {
+                }, (argv) => {
+                    functionToExec = createAction;
+                    functionInput = argv.action_name;
+                })
+        })
         .command('project init', 'Initialize project', () => {
             needProjectData = false;
             functionToExec = projectInit;
@@ -161,6 +169,11 @@ function projectInit() {
             errorHandler.printError(err);
         });
     });
+}
+
+function createAction(action_name) {
+    //code actions
+    flowHandler.createCodeAction(action_name);
 }
 
 function deployPiece(environment_name) {

@@ -137,6 +137,45 @@ module.exports.updateFlow = (flow_path) => {
     });
 }
 
+module.exports.createCodeAction = (action_name)=>{
+    if (fs.existsSync('flow.json')) {
+        try {
+            let flow = JSON.parse(fs.readFileSync('flow.json'));
+            if (!fs.existsSync('./code')) {
+                fs.mkdirSync(path.join(process.cwd(), 'code'));
+            }
+            createCodeActionFolder(action_name);
+            flow.version.actions.push({
+                name: action_name,
+                type: "CODE",
+                displayName: action_name,
+                settings: {
+                    artifact: action_name + ".zip",
+                    input: {}
+                }
+            });
+            fs.writeFileSync('./flow.json', beautify(flow));
+            logger.info('Code action created successfully!');
+        }catch(err) {
+            return logger.error(err);
+        }
+    }else {
+        logger.error("Wrong directory, please use command inside flow directory");
+    }
+}
+
+function createCodeActionFolder(action_name) {
+
+    fs.mkdirSync(path.join(process.cwd(), 'code', action_name));
+    let writtenData = 'exports.codePiece = async (context) => {};'
+    fs.writeFileSync(path.join(process.cwd(), 'code', action_name, 'index.js'), writtenData);
+    writtenData = {};
+    writtenData.name = action_name;
+    writtenData.version = "1.0.0";
+    writtenData.dependencies = {};
+    fs.writeFileSync(path.join(process.cwd(), 'code', action_name, 'package.json'), beautify(writtenData));
+}
+
 function restructFlow(flow){
     let writtenData = JSON.parse(JSON.stringify(flow));
     writtenData.lastVersion = undefined
