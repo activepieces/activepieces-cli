@@ -161,6 +161,9 @@ module.exports.createCodeAction = (action_name)=>{
             fs.writeFileSync('./flow.json', beautify(flow));
             logger.info('Code action created successfully!');
         }catch(err) {
+            if(err.code == "EEXIST") {
+                return logger.error(`Code action ${action_name} already exists`);
+            }
             return logger.error(err);
         }
     }else {
@@ -174,8 +177,6 @@ function createCodeActionFolder(action_name) {
     let writtenData = 'exports.codePiece = async (context) => {};'
     fs.writeFileSync(path.join(process.cwd(), 'code', action_name, 'index.js'), writtenData);
     writtenData = {};
-    writtenData.name = action_name;
-    writtenData.version = "1.0.0";
     writtenData.dependencies = {};
     fs.writeFileSync(path.join(process.cwd(), 'code', action_name, 'package.json'), beautify(writtenData));
 }

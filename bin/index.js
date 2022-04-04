@@ -167,11 +167,6 @@ function projectInit() {
     });
 }
 
-function createAction(action_name) {
-    //code actions
-    flowHandler.createCodeAction(action_name);
-}
-
 function deployPiece(environment_name) {
     pieceHandler.deployPiece(environment_name);
 }
@@ -219,3 +214,7 @@ function commitFlow(flowId) {
     }
 }
 
+function createAction(action_name) {
+    //code actions
+    flowHandler.createCodeAction(action_name);
+}
