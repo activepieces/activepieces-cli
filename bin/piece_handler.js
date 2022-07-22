@@ -22,25 +22,9 @@ module.exports.init = (_verbose, _host, _api_key, _project_id) => {
 }
 
 module.exports.createPiece = async (piece_name) => {
-    prompts({
-        type: 'select',
-        name: 'pieceType',
-        message: 'Please select the piece type:',
-        choices: [{
-            title: 'Integration',
-            value: 'INTEGRATION'
-        },
-            {
-                title: 'Connector',
-                value: 'CONNECTOR'
-            },
-        ],
-        initial: 0
-    }).then(async pieceTypeSelector => {
-        let access = 'PRIVATE';
-        let pieceType = pieceTypeSelector.pieceType;
-        createPieceHelper(piece_name, access, pieceType);
-    });
+    let access = 'PRIVATE';
+    createPieceHelper(piece_name, access);
+
 }
 
 module.exports.updatePiece = () => {
@@ -99,10 +83,10 @@ module.exports.publishPiece = async () => {
 module.exports.deployPiece = async (environment_name) => {
     if (!fs.existsSync('./piece.json')) {
         logger.error("Wrong directory, please use command inside piece directory");
-    }else {
+    } else {
         let piece = JSON.parse(fs.readFileSync('./piece.json'));
         let latestVersion = piece.version.id;
-        if(piece.version.state === 'DRAFT'){
+        if (piece.version.state === 'DRAFT') {
             latestVersion = piece.versionsList.at(-2);
         }
         getEnvironmentId(environment_name).then((environment) => {
@@ -161,13 +145,12 @@ function getEnvironmentId(environment_name) {
 
 }
 
-function createPieceHelper(piece_name, access, piece_type) {
+function createPieceHelper(piece_name, access) {
     if (!fs.existsSync('./project.json')) {
         logger.error("Wrong directory, please use command inside project directory");
     } else {
         const piece = {
             "name": piece_name,
-            "type": piece_type,
             "version": {
                 "dependencies": [],
                 "configs": [],
@@ -200,7 +183,7 @@ function createPieceHelper(piece_name, access, piece_type) {
     }
 }
 
-function updateFlowsHelper(){
+function updateFlowsHelper() {
     let promises = [];
     let flows = fs.readdirSync(process.cwd());
     flows.forEach((flow) => {
@@ -222,6 +205,8 @@ function updatePieceHelper(piece_id, request_data) {
         });
         if (fs.existsSync("logo.jpg")) {
             bodyFormData.append("logo", fs.createReadStream("logo.jpg"));
+        } else if (fs.existsSync("logo.png")) {
+            bodyFormData.append("logo", fs.createReadStream("logo.png"));
         }
         const config = {
             method: 'put',
@@ -271,7 +256,7 @@ function createPiece(request_data) {
     });
 }
 
-function restruct(piece){
+function restruct(piece) {
     let writtenData = JSON.parse(JSON.stringify(piece));
     writtenData.lastVersion = undefined
     writtenData.epochCreationTime = undefined;
